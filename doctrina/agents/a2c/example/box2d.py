@@ -5,7 +5,7 @@ import argparse
 
 from doctrina.agents.a2c.model import A2C
 from doctrina.agents.a2c.training import train
-from doctrina.utils.parallel_envs import ParallelEnv
+from doctrina.utils.mpi_env import MpiEnv
 
 
 class Net(torch.nn.Module):
@@ -48,6 +48,10 @@ class Net(torch.nn.Module):
 
 
 def main(args):
+    # Before agent initialization
+    mpienv = MpiEnv(args.nenv_per_core,
+                    args.nenv_proc,
+                    lambda: gym.make(args.envname))
 
     env = gym.make(args.envname)
     in_size = env.observation_space.shape[0]
@@ -58,8 +62,7 @@ def main(args):
     agent.to(args.device)
     del env
 
-    penv = ParallelEnv(args.nenv, lambda: gym.make(args.envname))
-    train(args, penv, agent, print)
+    train(args, mpienv, agent, print)
 
 
 if __name__ == "__main__":
@@ -68,7 +71,10 @@ if __name__ == "__main__":
     parser.add_argument("--envname", type=str,
                         default="LunarLander-v2",
                         help="Name of the environment")
-    parser.add_argument("--nenv", type=int,
+    parser.add_argument("--nenv-per-core", type=int,
+                        help="Number of environemnts run in parallel",
+                        default=20)
+    parser.add_argument("--nenv-proc", type=int,
                         help="Number of environemnts run in parallel",
                         default=16)
     parser.add_argument("--lr", type=float, help="Learning rate", default=3e-4)
@@ -79,7 +85,7 @@ if __name__ == "__main__":
                         default=int(1e4))
     parser.add_argument("--n-step", type=int,
                         help="Number of iterations",
-                        default=20)
+                        default=10)
     parser.add_argument("--gamma", type=float,
                         help="Discount factor",
                         default=0.98)
@@ -88,6 +94,6 @@ if __name__ == "__main__":
                         default=0.1)
     parser.add_argument("--write-period", type=int,
                         help="Logging period",
-                        default=100)
+                        default=10)
     args = parser.parse_args()
     main(args)
