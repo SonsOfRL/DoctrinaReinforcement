@@ -85,7 +85,7 @@ if __name__ == "__main__":
                         default=int(1e4))
     parser.add_argument("--n-step", type=int,
                         help="Number of iterations",
-                        default=10)
+                        default=20)
     parser.add_argument("--gamma", type=float,
                         help="Discount factor",
                         default=0.98)
@@ -94,6 +94,6 @@ if __name__ == "__main__":
                         default=0.1)
     parser.add_argument("--write-period", type=int,
                         help="Logging period",
-                        default=10)
+                        default=100)
     args = parser.parse_args()
     main(args)

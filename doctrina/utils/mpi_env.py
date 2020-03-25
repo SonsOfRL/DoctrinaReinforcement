@@ -154,7 +154,6 @@ class MpiEnvClient(MpiEnvComm):
             raise ValueError("Action must be 2 dimensional. (B x k)")
 
         # Send action buffer to environment processes
-
         sendbuf = actions
         self.send_cmd("r_action_s_trans")
         gather_and_scatter(self.local_comm, sendbuf, self.remote_comm)
@@ -164,7 +163,6 @@ class MpiEnvClient(MpiEnvComm):
             self.local_comm, [sendbuf], self.remote_comm)
 
         next_state, reward, terminal = transition_triplet
-        # print(reward)
         return next_state, reward, terminal
 
     def __del__(self):

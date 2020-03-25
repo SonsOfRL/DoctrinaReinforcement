@@ -18,8 +18,10 @@ def train(args, mpienv, agent, writer=None):
             state = to_torch(state)
             action, log_prob, value, entropy = agent(state)
             action = action.unsqueeze(1).cpu().numpy()
+            
             next_state, reward, done = mpienv.step_no_pipeline(action)
-
+            reward = reward.reshape(-1, 1)
+            done = done.reshape(-1, 1)
             next_state = to_torch(next_state)
             with torch.no_grad():
                 _, next_value = agent.network(next_state)
@@ -38,3 +40,4 @@ def train(args, mpienv, agent, writer=None):
                                np.mean(loss_list[-10:])), flush=True)
         loss_list.append(agent.update(gamma=args.gamma,
                                       beta=args.beta) / args.n_step)
+
