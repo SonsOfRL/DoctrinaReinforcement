@@ -73,7 +73,7 @@ if __name__ == "__main__":
                         help="Name of the environment")
     parser.add_argument("--nenv-per-core", type=int,
                         help="Number of environemnts run in parallel",
-                        default=20)
+                        default=1)
     parser.add_argument("--nenv-proc", type=int,
                         help="Number of environemnts run in parallel",
                         default=16)
@@ -91,7 +91,7 @@ if __name__ == "__main__":
                         default=0.98)
     parser.add_argument("--beta", type=float,
                         help="Entropy coefficient",
-                        default=0.1)
+                        default=0.3)
     parser.add_argument("--write-period", type=int,
                         help="Logging period",
                         default=100)

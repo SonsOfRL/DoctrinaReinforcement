@@ -19,7 +19,7 @@ class A2C(torch.nn.Module):
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
         log_prob = dist.log_prob(action)
-        entropy = dist.entropy()
+        entropy = dist.entropy().reshape(*value.shape)
         return action, log_prob, value, entropy
 
     def update(self, gamma, beta=0.0):
