@@ -5,7 +5,8 @@ import argparse
 
 from doctrina.agents.a2c.model import A2C
 from doctrina.agents.a2c.training import train
-from doctrina.utils.parallel_envs import ParallelEnv
+from doctrina.utils.mpi_env import MpiEnv
+from doctrina.utils.writers import PrintWriter
 
 
 class Net(torch.nn.Module):
@@ -40,7 +41,7 @@ class Net(torch.nn.Module):
                 torch.nn.init.zeros_(module.bias)
         self.apply(param_init)
 
-    def forward(self, state):
+    def forward(self, state, *args, **kwargs):
         value = self.valuenet(state)
         logits = self.policynet(state)
 
@@ -48,6 +49,10 @@ class Net(torch.nn.Module):
 
 
 def main(args):
+    # Before agent initialization
+    mpienv = MpiEnv(args.nenv_per_core,
+                    args.nenv_proc,
+                    lambda: gym.make(args.envname))
 
     env = gym.make(args.envname)
     in_size = env.observation_space.shape[0]
@@ -58,8 +63,9 @@ def main(args):
     agent.to(args.device)
     del env
 
-    penv = ParallelEnv(args.nenv, lambda: gym.make(args.envname))
-    train(args, penv, agent, print)
+    writer = PrintWriter(flush=True)
+
+    train(args, mpienv, agent, writer)
 
 
 if __name__ == "__main__":
@@ -68,7 +74,10 @@ if __name__ == "__main__":
     parser.add_argument("--envname", type=str,
                         default="LunarLander-v2",
                         help="Name of the environment")
-    parser.add_argument("--nenv", type=int,
+    parser.add_argument("--nenv-per-core", type=int,
+                        help="Number of environemnts run in parallel",
+                        default=1)
+    parser.add_argument("--nenv-proc", type=int,
                         help="Number of environemnts run in parallel",
                         default=16)
     parser.add_argument("--lr", type=float, help="Learning rate", default=3e-4)
@@ -85,7 +94,7 @@ if __name__ == "__main__":
                         default=0.98)
     parser.add_argument("--beta", type=float,
                         help="Entropy coefficient",
-                        default=0.1)
+                        default=0.3)
     parser.add_argument("--write-period", type=int,
                         help="Logging period",
                         default=100)

@@ -14,17 +14,16 @@ class A2C(torch.nn.Module):
         self.optimizer = optimizer
         self.queue = deque()
 
-    def forward(self, state):
-        logits, value = self.network(state)
+    def forward(self, state, *args, **kwargs):
+        logits, value, *outs = self.network(state, *args, **kwargs)
         dist = torch.distributions.Categorical(logits=logits)
         action = dist.sample()
         log_prob = dist.log_prob(action)
-        entropy = dist.entropy()
-        return action, log_prob, value, entropy
+        entropy = dist.entropy().reshape(value.shape)
+        return (action, log_prob, value, entropy, *outs)
 
     def update(self, gamma, beta=0.0):
         R = self.queue[-1].next_value.detach()
-        gae = 0
         loss = 0
         while len(self.queue) > 0:
             reward, done, log_prob, value, next_value, entropy = self.queue.pop()
@@ -34,9 +33,9 @@ class A2C(torch.nn.Module):
             value_loss = adv.pow(2) / 2
             policy_gain = -log_prob * adv.detach()
 
-            loss += (value_loss).mean().item()
             self.optimizer.zero_grad()
             (value_loss + policy_gain - entropy*beta).mean().backward()
+            loss += value_loss.mean().item()
             self.optimizer.step()
         return loss
 

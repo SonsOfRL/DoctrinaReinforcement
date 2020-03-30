@@ -9,6 +9,7 @@ from collections import deque
 import gym
 from gym import spaces
 from PIL import Image
+from scipy.misc import imresize
 
 
 class NoopResetEnv(gym.Wrapper):
@@ -151,10 +152,10 @@ class WarpFrame(gym.ObservationWrapper):
         self.grayscale = grayscale
         if self.grayscale:
             self.observation_space = spaces.Box(low=0, high=255,
-                            shape=(self.height, self.width, 1), dtype=np.uint8)
+                                                shape=(self.height, self.width, 1), dtype=np.uint8)
         else:
             self.observation_space = spaces.Box(low=0, high=255,
-                            shape=(self.height, self.width, 3), dtype=np.uint8)
+                                                shape=(self.height, self.width, 3), dtype=np.uint8)
 
     def observation(self, frame):
         img = Image.fromarray(frame)
@@ -240,6 +241,17 @@ class LazyFrames(object):
         return self._force()[i]
 
 
+class ResizeAndShape(gym.ObservationWrapper):
+    def __init__(self, env):
+        gym.ObservationWrapper.__init__(self, env)
+        self.observation_space = gym.spaces.Box(
+            low=0, high=1, shape=(80, 80, 1), dtype=np.float32)
+
+    def observation(self, obs):
+        obs = imresize(obs[35:195].mean(2), (80, 80)).reshape(80, 80, 1)
+        return obs.astype(np.float32) / 255.0
+
+
 def wrap_deepmind(env, episode_life=True, clip_rewards=True,
                   frame_stack=True, scale=False):
     """Configure environment for DeepMind-style Atari.
@@ -248,11 +260,24 @@ def wrap_deepmind(env, episode_life=True, clip_rewards=True,
         env = EpisodicLifeEnv(env)
     if 'FIRE' in env.unwrapped.get_action_meanings():
         env = FireResetEnv(env)
-    env = WarpFrame(env)
-    if scale:
-        env = ScaledFloatFrame(env)
     if clip_rewards:
         env = ClipRewardEnv(env)
     if frame_stack:
         env = FrameStack(env, 4)
+    if scale:
+        env = ScaledFloatFrame(env)
+    return env
+
+
+def packed_wrapper(env):
+    """ Apply all wrappers.
+    """
+    env = EpisodicLifeEnv(env)
+    if 'FIRE' in env.unwrapped.get_action_meanings():
+        env = FireResetEnv(env)
+    env = WarpFrame(env)
+    env = MaxAndSkipEnv(env, 4)
+    env = ClipRewardEnv(env)
+    env = FrameStack(env, 4)
+    env = ScaledFloatFrame(env)
     return env

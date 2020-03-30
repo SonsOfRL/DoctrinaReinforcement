@@ -3,7 +3,7 @@ from copy import deepcopy
 from mpi4py import MPI
 import numpy as np
 
-from mpi_utils import list_gather_and_scatter, gather_and_scatter
+from doctrina.utils.mpi_utils import list_gather_and_scatter, gather_and_scatter
 
 
 class MpiEnvComm():
@@ -77,14 +77,14 @@ class MpiEnvClient(MpiEnvComm):
         Worker processes always wait for a command after performing a task.
         """
         cmd_list = ["s_state", "s_state_r_action", "s_trans_r_action",
-                    "s_trans", "switch_envs", "terminate"]
+                    "s_trans", "switch_envs", "r_action_s_trans", "terminate"]
         if isinstance(command, str):
             if command not in cmd_list:
                 raise ValueError("Given string command is not available")
             command = cmd_list.index(command)
         self.remote_comm.bcast({"command": command}, MPI.ROOT)
 
-    def observe(self, actions=None):
+    def observe(self, actions=None, swap=False):
         """ Gather and distribute states from environment to gpus nodes.
         If the "actions" is
         """
@@ -108,11 +108,12 @@ class MpiEnvClient(MpiEnvComm):
 
         states = gather_and_scatter(self.local_comm, sendbuf, self.remote_comm)
 
-        self.send_cmd("switch_envs")
+        if swap:
+            self.send_cmd("switch_envs")
 
         return states
 
-    def step(self, actions=None):
+    def step(self, actions=None, swap=False):
         """ Distribute actions to environments to step. Gather transition
         triplets.
         Arguments:
@@ -135,10 +136,37 @@ class MpiEnvClient(MpiEnvComm):
         transition_triplet = list_gather_and_scatter(
             self.local_comm, [sendbuf], self.remote_comm)
 
-        self.send_cmd("switch_envs")
+        if swap:
+            self.send_cmd("switch_envs")
         next_state, reward, terminal = transition_triplet
 
         return next_state, reward, terminal
+
+    def step_no_pipeline(self, actions):
+        """ Distribute actions to environments to step. Gather transition
+        triplets.
+        Arguments:
+            - actions: (B x k) where k is the number of actions per sample.
+            "k" is 1 for discrete action spaces.
+        """
+
+        if len(actions.shape) != 2:
+            raise ValueError("Action must be 2 dimensional. (B x k)")
+
+        # Send action buffer to environment processes
+        sendbuf = actions
+        self.send_cmd("r_action_s_trans")
+        gather_and_scatter(self.local_comm, sendbuf, self.remote_comm)
+
+        sendbuf = np.empty(0)
+        transition_triplet = list_gather_and_scatter(
+            self.local_comm, [sendbuf], self.remote_comm)
+
+        next_state, reward, terminal = transition_triplet
+        return next_state, reward, terminal
+
+    def __del__(self):
+        self.send_cmd("terminate")
 
 
 class MpiEnvWorker(MpiEnvComm):
@@ -169,7 +197,7 @@ class MpiEnvWorker(MpiEnvComm):
             np.stack(x, axis=0) for x in
             zip(*[env.step(a.item()) for a, env in zip(actions, self.envs)])]
 
-        # Reset the environments if nececcessay
+        # Reset the environments if necessary
         for ix, (done, n_state, env) in enumerate(zip(terminals,
                                                       next_states,
                                                       self.envs)):
@@ -178,7 +206,7 @@ class MpiEnvWorker(MpiEnvComm):
             else:
                 self.states[ix] = n_state
 
-        return next_states, rewards, terminals
+        return next_states, rewards.astype(np.float64), terminals
 
     def _switch_envs(self):
         if self.active_slice.start == 0:
@@ -197,6 +225,16 @@ class MpiEnvWorker(MpiEnvComm):
         """ Send states of the last active environments.
         """
         gather_and_scatter(self.local_comm, self.states, self.remote_comm)
+
+    def _r_action_s_transition(self):
+        """ Receive action send state for none pipelining
+        """
+        sendbuf = np.empty(0)
+        actions = gather_and_scatter(
+            self.local_comm, sendbuf, self.remote_comm)
+        transition = self.step(actions)
+        list_gather_and_scatter(
+            self.local_comm, transition, self.remote_comm)
 
     def _s_state_r_action(self):
         """
@@ -227,11 +265,13 @@ class MpiEnvWorker(MpiEnvComm):
             2: self._s_trans_r_action,
             3: self._s_trans,
             4: self._switch_envs,
+            5: self._r_action_s_transition
         }
         while True:
             cmd = self.receive_cmd()
             command = cmd["command"]
-            if command == 5:
+            # Careful here!!!!!
+            if command == 6:
                 exit()
             job = function_call_dict[command]
             job()
@@ -257,14 +297,16 @@ def MpiEnv(nenv, n_env_proc, env_fn, **env_kwargs):
 
 
 if __name__ == "__main__":
-    env = MpiEnv(nenv=20, n_env_proc=4,
-                 env_fn=lambda: gym.make("CartPole-v1"))
-    actions = np.ones((env.nenv * env.n_env_proc, 1), dtype=np.int32)
+    env = MpiEnv(nenv=3, n_env_proc=1,
+                 env_fn=lambda: gym.make("LunarLander-v2"))
+    actions = np.arange(env.nenv * env.n_env_proc).reshape(-1, 1)
 
-    states = env.observe()
-    states = env.observe(actions)
-    next_s, reward, terminal = env.step(actions)
-    next_s, reward, terminal = env.step()
+    for i in range(10000):
+        states = env.observe(swap=False)
+        # states = env.observe(actions)
+        next_s, reward, terminal = env.step_no_pipeline(actions)
+        # next_s, reward, terminal = env.step()
+        # print(states, next_s, terminal, reward)
 
     env.send_cmd("terminate")
-    print(reward)
+    # print(reward)
