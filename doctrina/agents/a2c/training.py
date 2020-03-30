@@ -25,7 +25,7 @@ def train(args, mpienv, agent, writer=None):
             state = mpienv.observe(swap=False)
             state = to_torch(state)
             action, log_prob, value, entropy, *model_hx = agent(
-                state, model_hx.detach()
+                state, model_hx
             )
             action = action.unsqueeze(1).cpu().numpy()
 

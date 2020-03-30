@@ -33,11 +33,12 @@ class A2C(torch.nn.Module):
             value_loss = adv.pow(2) / 2
             policy_gain = -log_prob * adv.detach()
 
-            self.optimizer.zero_grad()
-            (value_loss + policy_gain - entropy*beta).mean().backward()
-            loss += value_loss.mean().item()
-            self.optimizer.step()
-        return loss
+            loss += (value_loss + policy_gain - entropy*beta)
+        self.optimizer.zero_grad()
+        loss = loss.mean()
+        loss.backward()
+        self.optimizer.step()
+        return loss.item()
 
     def add_trans(self, reward, done, log_prob, value, next_value, entropy):
         self.queue.append(self.Transition(reward, done,
