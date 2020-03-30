@@ -6,6 +6,7 @@ import argparse
 from doctrina.agents.a2c.model import A2C
 from doctrina.agents.a2c.training import train
 from doctrina.utils.mpi_env import MpiEnv
+from doctrina.utils.writers import PrintWriter
 
 
 class Net(torch.nn.Module):
@@ -40,7 +41,7 @@ class Net(torch.nn.Module):
                 torch.nn.init.zeros_(module.bias)
         self.apply(param_init)
 
-    def forward(self, state):
+    def forward(self, state, *args, **kwargs):
         value = self.valuenet(state)
         logits = self.policynet(state)
 
@@ -62,7 +63,9 @@ def main(args):
     agent.to(args.device)
     del env
 
-    train(args, mpienv, agent, print)
+    writer = PrintWriter(flush=True)
+
+    train(args, mpienv, agent, writer)
 
 
 if __name__ == "__main__":
