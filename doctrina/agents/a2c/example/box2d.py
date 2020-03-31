@@ -2,10 +2,12 @@ import torch
 import numpy as np
 import gym
 import argparse
+import cProfile
+import sys
 
 from doctrina.agents.a2c.model import A2C
 from doctrina.agents.a2c.training import train
-from doctrina.utils.mpi_env import MpiEnv
+from doctrina.utils.mpi_env import MpiEnv, MpiEnvComm
 from doctrina.utils.writers import PrintWriter
 
 
@@ -50,9 +52,11 @@ class Net(torch.nn.Module):
 
 def main(args):
     # Before agent initialization
+    pr = cProfile.Profile()
     mpienv = MpiEnv(args.nenv_per_core,
                     args.nenv_proc,
-                    lambda: gym.make(args.envname))
+                    lambda: gym.make(args.envname),
+                    pr=pr)
 
     env = gym.make(args.envname)
     in_size = env.observation_space.shape[0]
@@ -99,4 +103,5 @@ if __name__ == "__main__":
                         help="Logging period",
                         default=100)
     args = parser.parse_args()
+
     main(args)

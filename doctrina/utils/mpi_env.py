@@ -2,6 +2,7 @@ import gym
 from copy import deepcopy
 from mpi4py import MPI
 import numpy as np
+import sys
 
 from doctrina.utils.mpi_utils import list_gather_and_scatter, gather_and_scatter
 
@@ -17,8 +18,8 @@ class MpiEnvComm():
 
         if size <= n_env_proc:
             raise ValueError(
-                "Not enough processes for {} many environments"
-                .format(n_env_proc))
+                "Not enough processes for {} environments in {} processes"
+                .format(n_env_proc, size))
 
         color = MpiEnvComm.get_color(n_env_proc)
         self.local_comm = MPI.COMM_WORLD.Split(color=color, key=rank)
@@ -43,14 +44,25 @@ class MpiEnvComm():
     def reset(self):
         raise NotImplementedError
 
+    @staticmethod
+    def write_profile(pr):
+        pr.disable()
+        pr.dump_stats("cpu_%d.prof" % (MPI.COMM_WORLD.Get_rank()+1))
+        # with open("cpu_%d.txt" % (MPI.COMM_WORLD.Get_rank()+1), "w") as output_file:
+        #     sys.stdout = output_file
+        #     pr.print_stats(sort="cumulative")
+        #     sys.stdout = sys.__stdout__
+
 
 class MpiEnvClient(MpiEnvComm):
     """ Parallel environment class that utilize MPI functionallity.
     """
 
-    def __init__(self, nenv, n_env_proc, env_fn, **env_kwargs):
+    def __init__(self, nenv, n_env_proc, env_fn, pr, **env_kwargs):
         super().__init__(n_env_proc)
         self.nenv = nenv
+        self.pr = pr
+        pr.enable()
 
         env = env_fn(**env_kwargs)
 
@@ -173,9 +185,11 @@ class MpiEnvWorker(MpiEnvComm):
     """ MPI worker class that runs the environments.
     """
 
-    def __init__(self, nenv, n_env_proc, env_fn, **env_kwargs):
+    def __init__(self, nenv, n_env_proc, env_fn, pr, **env_kwargs):
         super().__init__(n_env_proc)
         self.nenv = nenv
+        self.pr = pr
+        self.pr.enable()
 
         # Initialize environments for per processes(double the given amount)
         self._envs = [{"env": env_fn(**env_kwargs),
@@ -272,6 +286,7 @@ class MpiEnvWorker(MpiEnvComm):
             command = cmd["command"]
             # Careful here!!!!!
             if command == 6:
+                MpiEnvComm.write_profile(self.pr)
                 exit()
             job = function_call_dict[command]
             job()
@@ -285,15 +300,15 @@ class MpiEnvWorker(MpiEnvComm):
         return self._states[self.active_slice]
 
 
-def MpiEnv(nenv, n_env_proc, env_fn, **env_kwargs):
+def MpiEnv(nenv, n_env_proc, env_fn, pr, **env_kwargs):
     """ Fake class
     """
     color = MpiEnvComm.get_color(n_env_proc)
 
     if color == 0:
-        return MpiEnvClient(nenv, n_env_proc, env_fn, **env_kwargs)
+        return MpiEnvClient(nenv, n_env_proc, env_fn, pr, **env_kwargs)
     else:
-        return MpiEnvWorker(nenv, n_env_proc, env_fn, **env_kwargs)
+        return MpiEnvWorker(nenv, n_env_proc, env_fn, pr, **env_kwargs)
 
 
 if __name__ == "__main__":

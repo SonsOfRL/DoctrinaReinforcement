@@ -2,12 +2,14 @@ import torch
 import numpy as np
 import gym
 import argparse
+import cProfile
 
 from doctrina.agents.a2c.model import A2C
 from doctrina.agents.a2c.training import train
-from doctrina.utils.mpi_env import MpiEnv
+from doctrina.utils.mpi_env import MpiEnv, MpiEnvComm
 from doctrina.utils.atari_wrapper import ResizeAndShape
 from doctrina.utils.writers import PrintWriter
+
 
 
 class Net(torch.nn.Module):
@@ -42,9 +44,12 @@ def makeenv(envname):
 
 def main(args):
     # Before agent initialization
+    pr = cProfile.Profile()
+
     mpienv = MpiEnv(args.nenv_per_core,
                     args.nenv_proc,
-                    lambda: makeenv(args.envname))
+                    lambda: makeenv(args.envname),
+                    pr=pr)
 
     env = makeenv(args.envname)
     in_size = env.observation_space.shape[-1]
@@ -58,6 +63,7 @@ def main(args):
     writer = PrintWriter(flush=True)
 
     train(args, mpienv, agent, writer)
+    MpiEnvComm.write_profile(mpienv.pr)
 
 
 if __name__ == "__main__":
