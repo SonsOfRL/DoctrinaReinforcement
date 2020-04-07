@@ -47,7 +47,8 @@ class MpiEnvComm():
     @staticmethod
     def write_profile(pr):
         pr.disable()
-        pr.dump_stats("cpu_%d.prof" % (MPI.COMM_WORLD.Get_rank()+1))
+        if MPI.COMM_WORLD.Get_rank() < 5:
+            pr.dump_stats("logs/atari_cpu_%d.prof" % (MPI.COMM_WORLD.Get_rank()+1))
         # with open("cpu_%d.txt" % (MPI.COMM_WORLD.Get_rank()+1), "w") as output_file:
         #     sys.stdout = output_file
         #     pr.print_stats(sort="cumulative")
