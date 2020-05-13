@@ -11,7 +11,6 @@ from doctrina.utils.atari_wrapper import ResizeAndShape
 from doctrina.utils.writers import PrintWriter
 
 
-
 class Net(torch.nn.Module):
 
     def __init__(self, channels, num_actions, memsize=128):
